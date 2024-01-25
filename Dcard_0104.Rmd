@@ -1,0 +1,270 @@
+---
+title: "Dcard_02.Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) #先用 library(tidyverse) 匯入dplyr package
+library(httr)
+library(jsonlite)
+library(rvest)
+library(jiebaR)
+library(tidytext)
+library(nnet) #for multinomial logistic regression model.
+library(wordcloud2)
+options(stringsAsFactors = F)
+options(verbose = T)
+options(scipen = 999)
+```
+
+#讀取檔案
+```{r}
+data <- read_csv(file = "Dcard&PTT_Label - ptt_dcard_post_label.csv",col_names = c('text','label'))
+```
+
+#資料處理
+```{r}
+# 留言編號
+data <- data%>%
+  mutate(doc_id = row_number())
+
+# 未來性詞庫
+future <- c("結婚", "小孩","存款","退休","月子","買車","伴侶","強勢","婆婆","公公","公婆","岳父","岳母","家庭","婆媳","妻子","孩子","丈夫","老公","老婆","先生","另一半","家事","婚後","背景","未來","耽誤","經營","婚禮","婚紗","蜜月","奶粉","幼稚園","前夫","前妻","教育","花費","投資","規劃","家暴","婚姻","前提","高齡","產婦","爸爸","媽媽","適婚","凍卵","共識","家用","存款","資源","晚婚","年紀","大齡","年收","夫妻","尿布","現實","開銷","擇偶","女方","男方","家長","價值觀","學歷","房租","水電","兒子","女兒","獨生","薪水","孝親","支出","家人","分手","娶","嫁","負擔","長跑","婆家","金錢","門檻","收入","飯票","主婦","經濟","配偶","法律","健康","身體","離婚","長輩","催","懷孕","財產","房貸","責任","道德","安全感","登記","宴客","生產","贍養費","工作","未婚","過來人","人妻","人夫","外遇","偷腥","相親","成長","有房","有車","買房","願望","研究所")
+
+# 網路年輕人詞庫
+Internet <-	c("鄉民","酸民","大大","水水","肥宅","魯蛇","頭香","卡","幫高調","潛水","神","ㄏㄏ","三十公分","G罩杯","G奶","婉君","8+9","工具人","邊緣人","啾咪","回鍋文","OP","灌水","蛆蛆","綠蛆","吱吱","817","689","1450","柯粉","柯黑","韓粉","韓黑","英粉","英黑","郭粉","郭黑","支那","覺青","皇民","蔡旺旺","吉娃娃","台獨","菸粉","消波塊","中部粽","下去領五百","台灣價值","鬼島","天龍人","天龍國","戰鬥民族","韓狗","26","洋長","冥嘴","霉體","妓者","低能卡","巴哈姆特","G8","3Q","1314","87","BJ4","94狂","9487","der","e04","冏","XD","Orz","鎂","慶記","閃","閃光","閃光彈","好人","嘴砲","嘴炮","長輩圖","台女","GG","腦殘","上車","不億外","三寶","馬路三寶","瓜張","傻眼貓咪","踹共","母湯","粗奶丸","夢到的","已知用火","躺著也中槍","沒圖沒真相","阿不就好棒棒","啊不就好棒棒","你在大聲甚麼啦","人帥真好","人醜性騷擾","咩噗","是在哈囉","月經文","森77","母湯喔","氣pupu","氣噗噗","水喔","唱邱","唱秋","汁妹","虧妹","鱷口","沒路用","洗洗睡","發芬","笑芬","甘啊捏","甘安捏","洗勒幹","ㄇㄉㄈㄎ","YT","佛系","俗辣","公蝦毀","再啦幹","北七","卡好","像極了愛情","衝一波","芒果乾","人品爆發","啊災","ㄚ災","阿災","靠北","哭爸","靠杯","領便當","魔法師","黑特","可撥","黑阿","嘿阿","塊陶阿","塊陶啊","塊陶","小粉紅","幫QQ","廠廠","海景第一排","珍香","吉他","撿到槍","辣個男人","旋轉","是在哈佛","在打在","牙起來","穩單","穩交","北車","北捷","隱眼","生快","HBD","水逆","國館","安森","永豆","+1","484","666","塑膠","2486","呱張","咖啡話","雨女無瓜","地精","郭","幹話","秀下現","葉佩雯","新警察","低端人口","越想越不對勁","起風了","鍵盤小妹","懶人包","skr","777","hen","神回","2266","沙發","牛B","牛逼","草尼瑪","草泥馬","河蟹","有雷","玻璃心","靠譜","QQ")
+
+#情緒性詞庫 (Positive & Negative)
+Emotional <- c("洗勒幹", "洗嘞哈囉", "氣勒來", " 跨三小" ,"看三小", "看洨", "誇洨", "ㄇㄉㄈㄎ", "可悲", "摳連哪", "不爽", "滾", "俗辣","幹","靠","啥洨","三小", "謝感" ,"三寶","鞋感", "去死", "甘阿捏","氣勒來", "氣在來", "氣再來", "唱秋", "媽的", "e04", "踹共" , "靠杯", "操你媽的", "幹你娘","北七","87","操", "你娘","有病","神經病","有毛病", "蕭查某","瘋子","白目", "白痴", "智障", "腦殘", "渣男", "渣女" ,"人渣", "吃屎" ,"操卒仔", "辣薩"  , "眼睛貼到屎" ,"爽", "你一生以吃屎為樂趣", "垃圾", "噁" , "廢物" , "幹樵", "婊仔子", "你欠幹", "挖加你幹", "你欠秋", "挖加你秋", "你欠幹", "操支票", "沒路用", "笑ㄟ", "廢物", "豬狗不如", "不如去死" , "死死ㄟ卡快活" , "死人臉", "肉腳", "死魚眼" , "便當臉" , "屎哈仔口" , "耳口生包皮", "賤", "爛", "笨" , "沒大腦", "哭腰" )
+
+# Initialize jieba cutter
+cutter <- worker()
+tagger <- worker("tag")
+
+# Add segment_not into user defined dictionary to avoid being cutted
+new_user_word(cutter, future)
+new_user_word(tagger, future)
+new_user_word(cutter, Emotional)
+new_user_word(tagger, Emotional)
+new_user_word(cutter, Internet)
+new_user_word(tagger, Internet)
+# new_user_word(cutter, word_young)
+# new_user_word(tagger, word_young)
+
+# loading Chinese stop words
+stopWords <- readRDS("data2/stopWords.rds")
+```
+# Data Cleaning
+```{r}
+post <- data %>%
+  mutate(sentence = str_split(text, " ")) %>%
+  mutate(sentence = str_split(text, "，")) %>%
+  unnest(sentence) %>%
+  group_by(doc_id) %>%
+  mutate(sentence_id = str_c(doc_id, "_", row_number())) %>%
+  mutate(num_count = str_count(sentence,"\\d+"),
+         nword = str_count(sentence,"\\s*") - 1) %>%
+  arrange(sentence) %>%
+  slice(1:142) %>%
+  ungroup() %>%
+  filter(!sentence == "") %>%
+  filter(!sentence == "..") %>%
+  filter(!sentence %in% c('/','—','———————————','.'))
+
+post_test <- post %>% select(sentence, sentence_id,label)
+```
+
+# 貼文斷詞
+```{r}
+post_unnested <- post %>%
+    mutate(word = purrr::map(sentence, function(x)segment(x, tagger))) %>%
+    select(sentence_id, word,label) %>%
+    mutate(word = purrr::map(word, function(x)str_c(names(x), "_", x))) %>%
+    unnest(word)%>%
+    separate(word, c("pos", "word"), sep = "_") %>%
+    filter(!(word %in% stopWords$word))
+
+saveRDS(post_unnested,file="post_unnested.rds")
+```
+
+# Feature
+```{r}
+doc_word_count <- post_unnested %>%
+  group_by(word) %>%
+  count(word) %>% 
+  filter(n >= 15) %>%
+  ungroup() %>%
+  filter(word != "") %>%
+  filter(word != " ") %>%
+  filter(!word %in% c("說","麽","只","好","做","覺得","麼","説","想","人","一個","我們","後","找","一直","一件")) %>%
+  anti_join(stop_words) %>%
+  filter(n <= 1200) %>%
+  left_join(post_unnested %>% select(word,sentence_id,label)) %>%
+  group_by(word,label) %>%
+  count() %>%
+  ungroup() %>%
+  filter(n > 30) %>%
+  filter(n <= 1000) %>%
+  left_join(post_unnested %>% select(word,sentence_id,label))
+
+index <- sample(1:nrow(doc_word_count), ceiling(nrow(doc_word_count) * .6))
+doc_word_count <- doc_word_count[index, ]
+```
+
+# 04 Building dtm
+```{r}
+dtm <- doc_word_count %>% 
+    cast_dtm(document = sentence_id, term = word, value = label)
+dtm %>% dim
+mat.df <- as.matrix(dtm) %>% as_tibble() %>% 
+  bind_cols(sentence_id = dtm$dimnames$Docs) %>%
+  left_join(post_unnested %>% select(sentence_id,label))
+colnames(mat.df) <- make.names(colnames(mat.df))
+```
+
+# 05 Dividing to test and training set
+```{r}
+index <- sample(1:nrow(mat.df), ceiling(nrow(mat.df) * .70))
+train.df <- mat.df[index, ]
+test.df <- mat.df[-index, ]
+dim(train.df)
+dim(test.df)
+```
+
+#06 Multinomial logistic Regression
+```{r}
+predicted <- test.df %>%
+    select(sentence_id, label)
+
+fit_mnl <- multinom(label ~ ., data = train.df %>% select(-sentence_id,label), MaxNWts = 10000, maxit=100) #max iteration:100
+predicted$mnl <- predict(fit_mnl, newdata = test.df %>% select(-sentence_id), "class")
+#test.df %>% select(-sentence_id, -label) ???
+(conf.mat <- table(predicted$mnl, predicted$label))
+(accuracy <- sum(diag(conf.mat))/sum(conf.mat) * 100)
+
+#testforme <- train.df %>% select(-sentence_id)
+#testforme1 = test.df %>% select(-sentence_id, -label)
+```
+# 算各分類最常出現字詞
+```{r}
+Analysis <- predicted %>%
+  left_join(post_unnested %>% select(word,pos,sentence_id),by ="sentence_id") %>%
+  group_by(label,word) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  anti_join(stop_words) %>%
+  filter(!word %in% c("說","好","人","覺得","一個","真的","朋友","知道","男","女生","想","一起","妳","你","後","我們","現在","這種","再","一直","現在","做","事","男生","之後","B","F","時")) %>%
+  ungroup()
+
+nn_top50 <- Analysis %>%
+  filter(label == -2) %>%
+  arrange(desc(n)) %>%
+  head(100) %>%
+  select(-label)
+
+n_top50 <- Analysis %>%
+  filter(label == -1) %>%
+  arrange(desc(n)) %>%
+  head(100) %>%
+  select(-label)
+
+o_top50 <- Analysis %>%
+  filter(label == 0) %>%
+  arrange(desc(n)) %>%
+  head(100) %>%
+  select(-label)
+
+p_top50 <- Analysis %>%
+  filter(label == 1) %>%
+  arrange(desc(n)) %>%
+  head(100) %>%
+  select(-label)
+
+pp_top50 <- Analysis %>%
+  filter(label == 2) %>%
+  arrange(desc(n)) %>%
+  head(100) %>%
+  select(-label)
+
+class(pp_top50)
+#(Analysis %>% filter(label == 2))[,3]
+```
+
+```{r}
+# tweet_word2 %>% 
+    count(word, source) %>%
+    spread(source, n, fill = 0) %>%  #fill = 0: 避免na出現
+    mutate(iPhone = (iPhone+1) / (sum(iPhone)+1),
+           Android = (Android+1) / (sum(Android)+1)) %>% #加一避免除以0
+    mutate(diff = log2(Android / iPhone)) %>%
+    group_by(diff > 0) %>%
+    top_n(20, abs(diff)) %>% #abs():取絕對值
+    ungroup() %>%
+    mutate(word = reorder(word, diff)) %>%
+    ggplot() + aes(word, diff, fill = diff > 0) + 
+    geom_col() + 
+    coord_flip() + 
+    scale_fill_manual(name = "", labels = c("iPhone", "Android"), 
+                      values = c("royalblue", "gold"))
+
+```
+
+# 各年齡區別的文字雲
+```{r}
+par(family=("Heiti TC Light"))
+#?par
+#You can use par() to control various aspects of your plots, such as the layout, axis labels, titles, colors, and more. 
+
+wordcloud2(pp_top50,shape = 'triangle',backgroundColor='black',size = 0.6258)
+
+wordcloud2(p_top50,shape = 'circle',backgroundColor='pink',size = 0.6258)
+
+wordcloud2(o_top50,shape = 'circle',backgroundColor='yellow',size = 0.6258)
+
+wordcloud2(n_top50,shape = 'circle',backgroundColor='blue',size = 0.6258)
+
+wordcloud2(nn_top50,shape = 'circle',backgroundColor='white',size = 0.6258)
+
+```
+
+
+#將留言資料引入、整理
+```{r}
+comment <- readRDS(file = "tidycomment.rds") %>%
+  mutate(label = 0,
+         sentence_id = row_number())
+
+comment_random <- comment %>% select(-word,-PttDcard,-pos,-label,-sentence_id) %>% unique()
+
+index <- sample(1:nrow(comment_random), ceiling(nrow(comment_random) * .01))
+test_comment <- comment_random[index, ] %>%
+  left_join(comment) %>%
+  mutate(label = 0)
+
+```
+
+```{r}
+dtm2 <- test_comment %>% 
+    cast_dtm(document = sentence_id, term = word, value = label)
+dtm2 %>% dim
+t<- as.matrix(dtm2)
+t2<- t%>% as_tibble()  
+predicted_comment.df <- as.matrix(dtm2) %>% as_tibble() %>% 
+  bind_cols(sentence_id = dtm2$dimnames$Docs)
+  # left_join(comment %>% select(PttDcard,label,comment))
+```
+
+
+```{r}
+predicted_comment <- test_comment %>% select(sentence_id, label)
+predicted_comment$mnl <- predict(fit_mnl, newdata = predicted_comment.df %>% select(-sentence_id), "class")
+
+(conf.mat <- table(predicted$mnl, predicted$label))
+(accuracy <- sum(diag(conf.mat))/sum(conf.mat) * 100)
+```
+
+
+
+
+
