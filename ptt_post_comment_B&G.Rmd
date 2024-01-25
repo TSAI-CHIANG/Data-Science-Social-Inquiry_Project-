@@ -1,0 +1,174 @@
+---
+title: "PTT Posts and Comments"
+author: "b05106034"
+date: "2020"
+output:
+  html_document:
+    theme: cerulean
+    highlight: zenburn
+    toc: yes
+    toc_float:
+      collapsed: no
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+# loading packages
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(httr)
+library(rvest)
+options(stringsAsFactors = F)
+options(verbose = T)
+options(scipen = 999)
+
+library(stringr)
+library(tidytext) 
+library(jiebaR)
+library(lubridate)
+library(purrr)
+library(dplyr)
+```
+
+
+
+#題二 Scraping PTT Posts and Comments
+```{r}
+
+pre <- "https://www.ptt.cc"
+
+post.df <- tibble() #tibble() is new version of data_frame()
+# for-loop
+for(page in 4930:5187){ 
+    url <- str_c("https://www.ptt.cc/bbs/Boy-Girl/index",page,".html")
+    
+    print(url)
+    doc <- GET(url) %>%
+        content("text") %>%
+        read_html()
+    nodes <- html_nodes(doc, ".r-ent")
+    nrec <- html_node(nodes, ".nrec") %>% html_text() %>% as.numeric()
+    title <- html_node(nodes, ".title a") %>% html_text()
+    link <- html_node(nodes, ".title a") %>% html_attr("href") %>%
+        str_c(pre, .)
+    author <- html_node(nodes, ".meta > .author") %>% html_text()
+    
+    page.df <- data_frame(link, author,nrec, title)
+    
+    post.df <- bind_rows(post.df, page.df)
+    message(nrow(post.df))
+}
+
+post.df %>% saveRDS(file="post_BG.rds")
+#posts <- load(file="post_gossiping.rda")
+
+post.df %>% glimpse()
+
+```
+
+
+# Parse one post
+```{r}
+
+url1 <- post.df$link[1]
+
+# Getting back the article and parsing as html
+# Remember to send cookie
+doc1 <- GET(url1) %>%
+    content("text") %>%
+    read_html()
+
+# Verifying the doc by write_html() and browseURL()
+# write_html(doc1, "test1.html")
+# browseURL("test1.html")
+
+# Getting content by CSS selector
+pcontent <- html_node(doc1, xpath = '//*[@id="main-content"]/text()[1]') %>% html_text() %>% cat
+
+pcomment <- html_nodes(doc1, '#main-content > div> span.f3.push-content') %>%  
+    html_text() %>%
+    str_replace_all(":", "")
+
+pcomment
+# Combining data to a data frame
+
+```
+
+
+# Using for-loop to get all comments
+```{r}
+
+# Create an empty data frame -> all_comment_df
+all_content_df<- data_frame()
+
+tryCatch(
+  for(url2 in post.df$link){
+      doc2 <- GET(url2) %>%
+          content("text") %>%
+          read_html()   
+      
+ pcontent  <- html_nodes(doc2, xpath = '//*[@id="main-content"]/text()[1]')%>%
+ html_text() 
+      
+      content.temp <- data_frame(pcontent,url2)
+      
+      all_content_df <- bind_rows(all_content_df, content.temp)
+  }
+)
+ 
+all_content_df %>% saveRDS("post_ptt_content.rds")
+ index <- sample(1:nrow(all_content_df), 4000)
+ 
+ all_content_df1 <- all_content_df[index,]%>%
+ #all_content_df2 <- all_content_df[-index,]
+ #index3 <- sample(1:nrow(all_content_df2 ), 1000)
+ #all_content_df2[index3,]%>%
+   write.csv(file="content_BG1.csv")
+
+```
+
+```{r}
+all_comment_df <- data_frame()
+# for-loop
+tryCatch(
+  for(url2 in post.df$link){
+      doc2 <- GET(url2) %>%
+          content("text") %>%
+          read_html()   
+      
+      pcomment <- html_nodes(doc2, 
+                             '#main-content > div> span.f3.push-content') %>%  
+      html_text() %>%
+      str_replace_all(":", "")
+      
+      comment.temp <- data_frame(pcomment,url2)
+      
+      all_comment_df <- bind_rows(all_comment_df, comment.temp)
+  }
+)
+ all_comment_df%>% saveRDS(file="comment_BG.rds")
+
+# all_comment_df %>% glimpse
+
+
+
+```
+
+
+
+#ptt comment 斷詞
+
+```{r}
+ptt_comment<- readRDS('../data/PTTCOMMENT.rds')
+```
+
+
+
+
+
+
+
+
