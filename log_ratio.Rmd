@@ -1,0 +1,50 @@
+---
+title: "0105_logratio"
+author: "Yu, Tsai-Chiang"
+date: "2021/1/5"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidyr) 
+library(jiebaR)
+options(stringsAsFactors = F)
+options(scipen = 999)
+
+```
+
+
+
+```{r}
+output.df<- readRDS('Output_0104.rds') %>% filter(!word %in% c("濤哥", "A606Y"))
+#Sys.setlocale(category = "LC_ALL",locale="cht") #轉回中文語系
+
+label_word_wide <- output.df %>%
+  mutate(label_id = str_c("label_", str_pad(label, 2, pad = "0")))%>%
+  count(label_id, word) %>%
+  #filter(n > 5) %>%
+  spread(label_id, n, fill = 0)
+
+#?Sys.setlocale
+
+lab_relate_ratios <- label_word_wide %>%
+  select(word, old = `label_-2`, young = label_02) %>%
+  mutate(old = (old+1)/sum(old+1)) %>%
+  mutate(young = (young+1)/sum(young+1)) %>%
+  mutate(logratio = log2(old / young)) %>%
+  arrange(desc(logratio))
+
+lab_relate_ratios %>%
+  group_by(logratio > 0) %>%
+  top_n(15, abs(logratio)) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, logratio)) %>%
+  ggplot(aes(word, logratio, fill = logratio < 0)) +
+  geom_col() + 
+  coord_flip() + 
+  scale_fill_manual(name = "", labels = c("Oldest(-2)", "Youngest(2)"),values = c("royalblue", "orange"))+
+  theme(axis.text.y=element_text(colour="black", family="Heiti TC Light"))
+```
+
+
